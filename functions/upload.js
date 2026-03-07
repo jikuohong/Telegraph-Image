@@ -10,61 +10,68 @@ export async function onRequestPost(context) {
         await errorHandling(context);
         telemetryData(context);
 
-        const uploadFile = formData.get('file');
-        if (!uploadFile) {
+        // 支持多文件上传
+        const uploadFiles = formData.getAll('file');
+        if (!uploadFiles || uploadFiles.length === 0) {
             throw new Error('No file uploaded');
         }
 
-        const fileName = uploadFile.name;
-        const fileExtension = fileName.split('.').pop().toLowerCase();
+        const results = [];
 
-        const telegramFormData = new FormData();
-        telegramFormData.append("chat_id", env.TG_Chat_ID);
+        for (const uploadFile of uploadFiles) {
+            const fileName = uploadFile.name;
+            const fileExtension = fileName.split('.').pop().toLowerCase();
 
-        // 根据文件类型选择合适的上传方式
-        let apiEndpoint;
-        if (uploadFile.type.startsWith('image/')) {
-            telegramFormData.append("photo", uploadFile);
-            apiEndpoint = 'sendPhoto';
-        } else if (uploadFile.type.startsWith('audio/')) {
-            telegramFormData.append("audio", uploadFile);
-            apiEndpoint = 'sendAudio';
-        } else if (uploadFile.type.startsWith('video/')) {
-            telegramFormData.append("video", uploadFile);
-            apiEndpoint = 'sendVideo';
-        } else {
-            telegramFormData.append("document", uploadFile);
-            apiEndpoint = 'sendDocument';
-        }
+            const telegramFormData = new FormData();
+            telegramFormData.append("chat_id", env.TG_Chat_ID);
 
-        const result = await sendToTelegram(telegramFormData, apiEndpoint, env);
+            // 根据文件类型选择合适的上传方式
+            let apiEndpoint;
+            if (uploadFile.type.startsWith('image/')) {
+                telegramFormData.append("photo", uploadFile);
+                apiEndpoint = 'sendPhoto';
+            } else if (uploadFile.type.startsWith('audio/')) {
+                telegramFormData.append("audio", uploadFile);
+                apiEndpoint = 'sendAudio';
+            } else if (uploadFile.type.startsWith('video/')) {
+                telegramFormData.append("video", uploadFile);
+                apiEndpoint = 'sendVideo';
+            } else {
+                telegramFormData.append("document", uploadFile);
+                apiEndpoint = 'sendDocument';
+            }
 
-        if (!result.success) {
-            throw new Error(result.error);
-        }
+            const result = await sendToTelegram(telegramFormData, apiEndpoint, env);
 
-        const fileId = getFileId(result.data);
+            if (!result.success) {
+                throw new Error(result.error);
+            }
 
-        if (!fileId) {
-            throw new Error('Failed to get file ID');
-        }
+            const fileId = getFileId(result.data);
 
-        // 将文件信息保存到 KV 存储
-        if (env.img_url) {
-            await env.img_url.put(`${fileId}.${fileExtension}`, "", {
-                metadata: {
-                    TimeStamp: Date.now(),
-                    ListType: "None",
-                    Label: "None",
-                    liked: false,
-                    fileName: fileName,
-                    fileSize: uploadFile.size,
-                }
-            });
+            if (!fileId) {
+                throw new Error('Failed to get file ID for: ' + fileName);
+            }
+
+            // 将文件信息保存到 KV 存储
+            if (env.img_url) {
+                await env.img_url.put(`${fileId}.${fileExtension}`, "", {
+                    metadata: {
+                        TimeStamp: Date.now(),
+                        ListType: "None",
+                        Label: "None",
+                        liked: false,
+                        fileName: fileName,
+                        fileSize: uploadFile.size,
+                    }
+                });
+            }
+
+            results.push({ 'src': `/file/${fileId}.${fileExtension}` });
         }
 
         return new Response(
-            JSON.stringify([{ 'src': `/file/${fileId}.${fileExtension}` }]),
+            JSON.stringify(results),
             {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
