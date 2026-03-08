@@ -67,7 +67,16 @@ export async function onRequestPost(context) {
                 });
             }
 
-            results.push({ 'src': `/file/${fileId}.${fileExtension}` });
+            const fileSrc = `/file/${fileId}.${fileExtension}`;
+            results.push({ 'src': fileSrc });
+
+            // 同步到图库
+            if (env.GALLERY_URL) {
+                const imageUrl = `https://image.kont.us.ci${fileSrc}`;
+                syncToGallery(imageUrl, fileName, env).catch(e =>
+                    console.error('[gallery sync] failed:', e.message)
+                );
+            }
         }
 
         return new Response(
@@ -137,5 +146,28 @@ async function sendToTelegram(formData, apiEndpoint, env, retryCount = 0) {
             return await sendToTelegram(formData, apiEndpoint, env, retryCount + 1);
         }
         return { success: false, error: 'Network error occurred' };
+    }
+}
+
+// ── 同步到图库 ─────────────────────────────────────────────────────────────────
+async function syncToGallery(imageUrl, fileName, env) {
+    const galleryUrl = env.GALLERY_URL.replace(/\/$/, '');
+    const res = await fetch(`${galleryUrl}/gallery/save`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Password': env.GALLERY_PASSWORD || '',
+        },
+        body: JSON.stringify({
+            imageUrl,
+            prompt: fileName || '手动上传',
+            originalPrompt: fileName || '手动上传',
+            model: 'uploaded',
+            source: 'imagehost',
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`gallery/save 返回 ${res.status}: ${err}`);
     }
 }
