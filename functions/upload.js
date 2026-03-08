@@ -78,8 +78,9 @@ export async function onRequestPost(context) {
             // 同步到图库（仅图片）
             if (env.GALLERY_URL && isImage) {
                 const imageUrl = `https://image.kont.us.ci${fileSrc}`;
-                syncToGallery(imageUrl, fileName, env).catch(e =>
-                    console.error('[gallery sync] failed:', e.message)
+                context.waitUntil(
+                    syncToGallery(imageUrl, fileName, env).catch(e =>
+                        console.error('[gallery sync] failed:', e.message)
                 );
             }
         }
