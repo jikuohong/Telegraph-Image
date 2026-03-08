@@ -19,26 +19,31 @@ export async function onRequestPost(context) {
         const results = [];
 
         for (const uploadFile of uploadFiles) {
+            // 只允许图片、视频、音频格式
+            const isImage = uploadFile.type.startsWith('image/');
+            const isVideo = uploadFile.type.startsWith('video/');
+            const isAudio = uploadFile.type.startsWith('audio/');
+            if (!isImage && !isVideo && !isAudio) {
+                results.push({ error: `${uploadFile.name} 格式不支持，仅允许图片/视频/音频` });
+                continue;
+            }
+
             const fileName = uploadFile.name;
             const fileExtension = fileName.split('.').pop().toLowerCase();
 
             const telegramFormData = new FormData();
             telegramFormData.append("chat_id", env.TG_Chat_ID);
 
-            // 根据文件类型选择合适的上传方式
             let apiEndpoint;
-            if (uploadFile.type.startsWith('image/')) {
+            if (isImage) {
                 telegramFormData.append("photo", uploadFile);
                 apiEndpoint = 'sendPhoto';
-            } else if (uploadFile.type.startsWith('audio/')) {
+            } else if (isAudio) {
                 telegramFormData.append("audio", uploadFile);
                 apiEndpoint = 'sendAudio';
-            } else if (uploadFile.type.startsWith('video/')) {
+            } else {
                 telegramFormData.append("video", uploadFile);
                 apiEndpoint = 'sendVideo';
-            } else {
-                telegramFormData.append("document", uploadFile);
-                apiEndpoint = 'sendDocument';
             }
 
             const result = await sendToTelegram(telegramFormData, apiEndpoint, env);
@@ -70,8 +75,8 @@ export async function onRequestPost(context) {
             const fileSrc = `/file/${fileId}.${fileExtension}`;
             results.push({ 'src': fileSrc });
 
-            // 同步到图库
-            if (env.GALLERY_URL) {
+            // 同步到图库（仅图片）
+            if (env.GALLERY_URL && isImage) {
                 const imageUrl = `https://image.kont.us.ci${fileSrc}`;
                 syncToGallery(imageUrl, fileName, env).catch(e =>
                     console.error('[gallery sync] failed:', e.message)
