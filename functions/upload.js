@@ -10,7 +10,6 @@ export async function onRequestPost(context) {
         await errorHandling(context);
         telemetryData(context);
 
-        // 支持多文件上传
         const uploadFiles = formData.getAll('file');
         if (!uploadFiles || uploadFiles.length === 0) {
             throw new Error('No file uploaded');
@@ -19,7 +18,6 @@ export async function onRequestPost(context) {
         const results = [];
 
         for (const uploadFile of uploadFiles) {
-            // 只允许图片、视频、音频格式
             const isImage = uploadFile.type.startsWith('image/');
             const isVideo = uploadFile.type.startsWith('video/');
             const isAudio = uploadFile.type.startsWith('audio/');
@@ -58,7 +56,6 @@ export async function onRequestPost(context) {
                 throw new Error('Failed to get file ID for: ' + fileName);
             }
 
-            // 将文件信息保存到 KV 存储
             if (env.img_url) {
                 await env.img_url.put(`${fileId}.${fileExtension}`, "", {
                     metadata: {
@@ -73,19 +70,23 @@ export async function onRequestPost(context) {
             }
 
             const fileSrc = `/file/${fileId}.${fileExtension}`;
-            results.push({ 'src': fileSrc });
+            const item = { src: fileSrc };
+            results.push(item);
 
-            // 同步到图库（仅图片）
-            console.log('[gallery] GALLERY_URL:', env.GALLERY_URL || 'NOT SET');
-            console.log('[gallery] isImage:', isImage, 'type:', uploadFile.type);
-            if (env.GALLERY_URL && isImage) {
-                const imageUrl = `https://image.kont.us.ci${fileSrc}`;
-                console.log('[gallery] calling syncToGallery with:', imageUrl);
-                context.waitUntil(
-                    syncToGallery(imageUrl, fileName, env)
-                        .then(() => console.log('[gallery] sync OK'))
-                        .catch(e => console.error('[gallery sync] failed:', e.message))
-                );
+            // 同步到图库（仅图片），同步结果写入响应方便调试
+            if (isImage) {
+                const galleryDebug = { GALLERY_URL: env.GALLERY_URL || 'NOT_SET' };
+                if (env.GALLERY_URL) {
+                    const imageUrl = `https://image.kont.us.ci${fileSrc}`;
+                    galleryDebug.imageUrl = imageUrl;
+                    try {
+                        await syncToGallery(imageUrl, fileName, env);
+                        galleryDebug.result = 'OK';
+                    } catch (e) {
+                        galleryDebug.result = 'FAILED: ' + e.message;
+                    }
+                }
+                item.galleryDebug = galleryDebug;
             }
         }
 
@@ -136,7 +137,6 @@ async function sendToTelegram(formData, apiEndpoint, env, retryCount = 0) {
             return { success: true, data: responseData };
         }
 
-        // 图片上传失败时转为文档方式重试
         if (retryCount < MAX_RETRIES && apiEndpoint === 'sendPhoto') {
             console.log('Retrying image as document...');
             const newFormData = new FormData();
@@ -159,7 +159,6 @@ async function sendToTelegram(formData, apiEndpoint, env, retryCount = 0) {
     }
 }
 
-// ── 同步到图库 ─────────────────────────────────────────────────────────────────
 async function syncToGallery(imageUrl, fileName, env) {
     const galleryUrl = env.GALLERY_URL.replace(/\/$/, '');
     const res = await fetch(`${galleryUrl}/gallery/save`, {
