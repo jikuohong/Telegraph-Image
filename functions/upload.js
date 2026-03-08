@@ -81,6 +81,7 @@ export async function onRequestPost(context) {
                 context.waitUntil(
                     syncToGallery(imageUrl, fileName, env).catch(e =>
                         console.error('[gallery sync] failed:', e.message)
+                    )
                 );
             }
         }
