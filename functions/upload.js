@@ -76,12 +76,15 @@ export async function onRequestPost(context) {
             results.push({ 'src': fileSrc });
 
             // 同步到图库（仅图片）
+            console.log('[gallery] GALLERY_URL:', env.GALLERY_URL || 'NOT SET');
+            console.log('[gallery] isImage:', isImage, 'type:', uploadFile.type);
             if (env.GALLERY_URL && isImage) {
                 const imageUrl = `https://image.kont.us.ci${fileSrc}`;
+                console.log('[gallery] calling syncToGallery with:', imageUrl);
                 context.waitUntil(
-                    syncToGallery(imageUrl, fileName, env).catch(e =>
-                        console.error('[gallery sync] failed:', e.message)
-                    )
+                    syncToGallery(imageUrl, fileName, env)
+                        .then(() => console.log('[gallery] sync OK'))
+                        .catch(e => console.error('[gallery sync] failed:', e.message))
                 );
             }
         }
