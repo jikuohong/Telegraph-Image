@@ -73,8 +73,9 @@ export async function onRequestPost(context) {
             const item = { src: fileSrc };
             results.push(item);
 
-            // 同步到图库（仅图片），同步结果写入响应方便调试
-            if (isImage) {
+            // 同步到图库（仅图片），skip_gallery=1 时跳过（避免从 gallery ingest 来的上传重复写入）
+            const skipGallery = formData.get('skip_gallery') === '1';
+            if (isImage && !skipGallery) {
                 const galleryDebug = { GALLERY_URL: env.GALLERY_URL || 'NOT_SET' };
                 if (env.GALLERY_URL) {
                     const imageUrl = `https://image.kont.us.ci${fileSrc}`;
